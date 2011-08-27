@@ -1,0 +1,89 @@
+
+html, body, table, tr, th, td, ul, ol, li, h1, h2, h3, h4, h5, h6, p {
+    margin:0;
+    padding:0;
+    list-style:none;
+}
+body {
+    font-size:10px; /* 1em = 10px */
+}
+
+p.flash {
+    position:absolute;
+    left:0;
+    right:0;
+    top:50%;
+    margin-top:-0.7em;
+    line-height:1.4em;
+    z-index:3000;
+    
+    display:none;
+    
+    font-family:Helvetica, Arial, sans-serif;
+    text-align:center;
+    font-size:3em;
+    font-weight:bold;
+}
+p.flash span {
+    display:inline-block;
+    padding:0 10px;
+    border-radius:10px;
+    
+    color:#fff;
+    background:#000;
+}
+p.flash.error span {
+    background:#CC170D;
+}
+
+.board {
+    position:absolute;
+    background-color:#f5f5f5;
+}
+.field {
+    position:absolute;
+    background-color:#eee;
+    border:0px solid #ddd;
+}
+.field.focus {
+    background-color:#ccc;
+    border-color:#bbb;
+}
+.field.temp {
+    border-color:#c00;
+}
+
+/* Color schemes */
+.field.red {
+    background-color:#DE2F2F;
+    border-color:#C31515;
+}
+.field.red.focus {
+    background-color:#AC0D0D;
+    border-color:#910B0B;
+}
+.field.blue {
+    background-color:#0E82B4;
+    border-color:#0C74A0;
+}
+.field.blue.focus {
+    background-color:#0A5882;
+    border-color:#084262;
+}
+.field.yellow {
+    background-color:#EFDC09;
+    border-color:#DDCC0A;
+}
+.field.yellow.focus {
+    background-color:#D9C91D;
+    border-color:#C2B41A;
+}
+.field.green {
+    background-color:#1BBC09;
+    border-color:#18A408;
+}
+.field.green.focus {
+    background-color:#049312;
+    border-color:#136D07;
+}
+
