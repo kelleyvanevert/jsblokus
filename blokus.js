@@ -491,9 +491,13 @@ var Blokus = (function() {
             // ? freeze while checking validity
             if (this.valid()) {
                 this.get(this.players.active.focus).removeClass("focus");
-                $(".tile-" + this.temps.tilename()).hide("puff", 300, function() {
+                $(".tile-" + this.temps.tilename()).animate({
+                    opacity: 0.3,
+                }, 500, function() {
+                    var t = $(this);
                     setTimeout(function() {
                         self.tilestore.hide("fade", 600, function() {
+                            t.css("opacity", 1);
                             self.commit();
                             self.get(self.players.active.focus).addClass("focus");
                             self.display_temp_tiles();
