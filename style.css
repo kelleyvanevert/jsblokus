@@ -42,6 +42,7 @@ p.flash.error span {
 }
 .field {
     position:absolute;
+    cursor:pointer;
     background-color:#eee;
     border:0px solid #ddd;
 }

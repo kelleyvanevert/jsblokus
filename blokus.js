@@ -1,8 +1,6 @@
 
 var Blokus = (function() {
     
-    var Blokus = {};
-    
     // Simple filter implementation (all I need)
     if (!Array.prototype.filter) {
         Array.prototype.filter = function(callback) {
@@ -13,6 +11,13 @@ var Blokus = (function() {
                 }
             }
             return res;
+        };
+    }
+    if (!Array.prototype.flatten) {
+        Array.prototype.flatten = function() {
+            return this.reduce(function(flat, section) {
+                return flat.concat(section);
+            });
         };
     }
     
@@ -77,64 +82,25 @@ var Blokus = (function() {
         }
         return a;
     };
-    
-    var Game = Blokus.Game = function()
-    {
-        // Board
-        this.board = new Board(this);
-        
-        // Players
-        var tilenames = '12v3otzl4PXFWTUYZNVL5';
-        this.players = [0, 1, 2, 3].map(function() {
-            return {
-                first_move: true,
-                tiles: tilenames,
-            };
-        });
-        
-        /*
-        // State
-        this.mode = 'play'; // | history
-        this.player = 0;
-        $('#cpc').css('background-color', this.colors[this.player]);
-        
-        // Click events
-        var self = this;
-        $('.field', this.board.el).bind('click', function(e) {
-            self.board.toggle_temporary($(e.target).data().pos);
-        });
-        $('a.play:first').bind('click', function(e) {
-            if (tilename = self.board.commit(self.player, self.isfirst[self.player], self.tiles[self.player])) {
-                self.isfirst[self.player] = false;
-                self.tiles[self.player] = self.tiles[self.player].replace(tilename, '');
-                self.player = (self.player + 1) % 4;
-                $('#cpc').css('background-color', self.colors[self.player]);
-                $('#msg').html('Allright, you placed a &quot;'+tilename+'&quot;! Player #'+(self.player+1)+', it\'s your turn!');
-            } else {
-                $('#msg').html('There was an error: <span style="color:#c00">'+self.board.errortext+'</span>');
-            }
-            return false;
-        });
-        $('a.clear:first').bind('click', function(e) {
-            self.board.clear();
-            return false;
-        });
-        */
-    }
-    Game.prototype.player = function(i) {
-        return this.players[i];
+    Vec.serialize = function(arr) {
+        return arr.map(function(v) {
+            return v.toString();
+        }).join(", ");
     };
-    /*
-    BlokusGame.prototype.getActivePlayer = function() {
-        return this.players[this.player];
-    }
-    BlokusGame.prototype.getActiveColor = function() {
-        return this.colors[this.player];
-    }
+    Vec.unserialize = function(str) {
+        var numbers = str.match(/[0-9]+/g);
+        if (!numbers) {
+            return [];
+        }
+        vecs = [];
+        for (var i = 0, len = numbers.length / 2; i < len; i++) {
+            vecs.push(new Vec(numbers[i*2], numbers[i*2 + 1]));
+        }
+        return vecs;
+    };
+    window.V = Vec;
     
-    */
-    
-    Blokus.blocknames = {
+    var blocknames = {
         // distances, sorted | dimensions | name
                             "|1.1" : "1",
                            "1|1.2" : "2",
@@ -158,7 +124,7 @@ var Blokus = (function() {
         "1.1.1.1.2.4.4.5.9.10|2.4" : "L",
         "1.1.1.1.4.4.4.9.9.16|1.5" : "5",
     };
-    var identify = Blokus.identify = function(vecs) {
+    var identify = function(vecs) {
         var uid;
         if (vecs.length == 1) {
             uid = "|1.1";
@@ -184,13 +150,133 @@ var Blokus = (function() {
             }).join(".");
             uid += "|" + [dims[2]-dims[0]+1, dims[3]-dims[1]+1].sort().join(".");
         }
-        return this.blocknames[uid] || "unknown";
+        return blocknames[uid] || false;
     };
     
-    var Board = Blokus.Board = function(game)
+    var Blokus = function()
     {
-        this.game = game;
+        var self = this;
         
+        /*
+            Game & (UI) state
+        */
+        this.active = 0;
+        this.uistate = "idle"; // idle|focus
+        
+        this.temps = {
+            // Private
+            _vecs: [], // _vecs[(new Vec(x, y)).toString()] == z => _vecs[z].equals(new Vec(x, y))
+            _tilename: null,
+            _update: function() {
+                this.all = this._vecs.map(function(v) {
+                    return v.clone();
+                });
+                
+                // The temporary stones by themselves are a valid tile iff all conditions apply:
+                // * 1 <= NUM <= 5
+                // * all stones connected
+                if (this._vecs.length < 1 || this._vecs.length > 5) {
+                    this._valid = false;
+                    return;
+                }
+                
+                var todo = this._vecs.slice(1).reduce(function(todo, v) {
+                    todo[v.toString()] = true;
+                    return todo;
+                }, {});
+                todo.num = this._vecs.length - 1;
+                var fringe = [this._vecs[0]];
+                while (fringe.length > 0 && todo.num > 0)
+                {
+                    fringe = fringe.map(function(f) {
+                        return f.neighbours();
+                    }).flatten().filter(function(v) {
+                        if (todo[v]) {
+                            delete todo[v];
+                            todo.num--;
+                            return true;
+                        } else {
+                            return false;
+                        }
+                    });
+                }
+                if (todo.num > 0) {
+                    this._valid = false;
+                    return;
+                }
+                
+                this._valid = true;
+                this._tilename = identify(this._vecs);
+            },
+            // Public
+            all: [],
+            add: function(v) {
+                var str = v.toString();
+                if (!this._vecs[str]) {
+                    this._vecs[str] = this._vecs.push(v) - 1;
+                    this._update();
+                }
+            },
+            remove: function(v) {
+                var str = v.toString();
+                if (this._vecs[str] != undefined) {
+                    if (this._vecs[str] == this._vecs.length - 1) {
+                        this._vecs.pop();
+                        delete this._vecs[str];
+                    } else {
+                        this._vecs[this._vecs[str]] = this._vecs[this._vecs.length - 1];
+                        this._vecs[this._vecs.pop().toString()] = this._vecs[str];
+                        delete this._vecs[str];
+                    }
+                    this._update();
+                }
+            },
+            contains: function(v) {
+                return this._vecs[v.toString()] != undefined;
+            },
+            empty: function() {
+                return this._vecs.length == 0;
+            },
+            valid: function() {
+                return this._valid;
+            },
+            tilename: function() {
+                return this._valid ? this._tilename : false;
+            },
+            reset: function() {
+                this._vecs = [];
+                this._update();
+            },
+            report: function() {
+                return this._valid ? "valid: " + this._tilename : "invalid";
+            },
+        };
+        
+        this.players = {
+            // Private
+            _i: -1,
+            _data: ["red", "blue", "yellow", "green"].map(function(color, k) {
+                return {
+                    index: k,
+                    first_move: true,
+                    tiles: "12v3otzl4PXFWTUYZNVL5",
+                    color: color,
+                    corner: new Vec(k % 3 == 0 ? 0 : 19, k < 2 ? 0 : 19),
+                    focus: new Vec(k % 3 == 0 ? 0 : 19, k < 2 ? 0 : 19),
+                };
+            }),
+            // Public
+            active: null,
+            rotate: function() {
+                this._i = (this._i + 1) % this._data.length;
+                this.active = this._data[this._i];
+                return this;
+            },
+        }.rotate();
+        
+        /*
+            HTML setup
+        */
         this.initiated = false;
         this.board = $("<div>").addClass("board").appendTo("body").hide();
         
@@ -200,28 +286,34 @@ var Blokus = (function() {
             var row = [];
             for (var x = 0; x < 20; x++)
             {
-                var field = $("<div>").addClass("field x-"+x+" y-"+y).data({
-                    x: x,
-                    y: y,
-                    status: "empty",
-                    player: -1, // 0, 1, 2 or 3 when permanent
-                }).appendTo(this.board);
-                row.push(field);
+                row.push($("<div>").addClass("field x-"+x+" y-"+y).data({
+                    pos: new Vec(x, y),
+                    permanent: false,
+                    player: null, // when permanent
+                }).appendTo(this.board));
             }
             this.table.push(row);
         }
         
+        /*
+            Event handling
+        */
         $(window).resize(this.layout.bind(this)).resize();
         $(window).keydown(this.key.bind(this));
-        
-        this.colors = ["red", "blue", "yellow", "green"];
-        
-        this.state = "idle"; // idle|focus
-        this.focus = new Vec(0, 0);
-        this.temps = [];
-        this.active = 0;
+        $(".field").click(function() {
+            if (!$(this).data("permanent")) {
+                if (self.uistate == "focus") {
+                    self.get(self.players.active.focus).removeClass("focus");
+                } else {
+                    self.uistate = "focus";
+                }
+                self.players.active.focus = $(this).data("pos").clone();
+                self.get(self.players.active.focus).addClass("focus");
+                self.toggletemp();
+            }
+        });
     };
-    Board.prototype.layout = function() {
+    Blokus.prototype.layout = function() {
         /* The display area is 3 wide, 2 high, with a maximal viewport fit */
         var height = $(window).height(),
             width = $(window).width(),
@@ -272,60 +364,64 @@ var Blokus = (function() {
             }, 400);
         }
     };
-    Board.prototype.key = function(e) {
-        if (this.state == "idle" && e.which >= 37 && e.which <= 40) {
-            this.get(this.focus).addClass("focus");
-            this.state = "focus";
-            return false;
-        } else if (this.state == "focus" && e.which >= 37 && e.which <= 40) {
-            this.get(this.focus).removeClass("focus");
-            this.focus = this.focus.add([
+    Blokus.prototype.key = function(e) {
+        var self = this;
+        if (this.uistate == "idle" && e.which >= 37 && e.which <= 40) {
+            this.get(this.players.active.focus).addClass("focus");
+            this.uistate = "focus";
+        } else if (this.uistate == "focus" && e.which >= 37 && e.which <= 40) {
+            this.get(this.players.active.focus).removeClass("focus");
+            this.players.active.focus = this.players.active.focus.add([
                 new Vec(-1, 0),
                 new Vec( 0,-1),
                 new Vec( 1, 0),
                 new Vec( 0, 1),
             ][e.which - 37]).modulo(20);
-            this.get(this.focus).addClass("focus");
-            return false;
-        } else if (this.state == "focus" && e.which == 27 && this.temps.length == 0) {
-            this.get(this.focus).removeClass("focus");
-            this.state = "idle";
-            return false;
-        } else if (this.state == "focus" && e.which == 27) {
-            for (var i = 0; i < this.temps.length; i++) {
-                this.get(this.temps[i]).removeClass("temp "+this.colors[this.active]);
-            }
-            this.temps = [];
-            return false;
-        } else if (this.state == "focus" && e.which == 32) {
-            if (this.get(this.focus).hasClass("temp")) {
-                var self = this;
-                this.temps = this.temps.filter(function(v) {
-                    return !v.equals(self.focus);
-                });
-            } else {
-                this.temps.push(this.focus.clone());
-            }
-            this.get(this.focus).toggleClass("temp "+this.colors[this.active]);
-            return false;
-        } else if (this.state == "focus" && e.which == 13) {
+            this.get(this.players.active.focus).addClass("focus");
+        } else if (this.uistate == "focus" && e.which == 27 && this.temps.empty()) {
+            this.get(this.players.active.focus).removeClass("focus");
+            this.uistate = "idle";
+        } else if (this.uistate == "focus" && e.which == 27) {
+            this.temps.all.map(function(v) {
+                self.get(v).removeClass("temp").removeClass(self.players.active.color);
+            });
+            this.temps.reset();
+        } else if (this.uistate == "focus" && e.which == 32) {
+            this.toggletemp();
+        } else if (this.uistate == "focus" && e.which == 13) {
             // ? freeze while checking validity
             if (this.valid()) {
+                this.get(this.players.active.focus).removeClass("focus");
                 this.commit();
-                this.active = (this.active + 1) % 4;
-                $.flash("Okay! It's " + this.colors[this.active] + "'s turn now..");
+                this.get(this.players.active.focus).addClass("focus");
+                $.flash("Okay! It's " + this.players.active.color + "'s turn now..");
             }
+        } else {
+            return true;
+        }
+        
+        return false;
+    };
+    Blokus.prototype.toggletemp = function() {
+        var f = this.get(this.players.active.focus);
+        if (!f.data("permanent")) {
+            if (f.hasClass("temp")) {
+                this.temps.remove(this.players.active.focus);
+            } else {
+                this.temps.add(this.players.active.focus.clone());
+            }
+            f.toggleClass("temp " + this.players.active.color);
         }
     };
-    Board.prototype.get = function(p) {
+    Blokus.prototype.get = function(p) {
         return this.table[p.y][p.x];
     };
-    Board.prototype.valid = function() {
+    Blokus.prototype.valid = function() {
         var self = this;
         
         // A move is valid iff all the conditions are satisfied:
-        //   the move-fields count no less than 1 or more than 5    (1)
-        //   all move-fields are connected                          (2)
+        //   the temporary fields must form a valid tile            (1)
+        //   the fields must not overlap with existing tiles        (2)
         //   no move-field sides with a previous-field              (3)
         //   the player must posess the implied tile                (4)
         //   if first move then one move-field must be in corner
@@ -334,41 +430,25 @@ var Blokus = (function() {
         //      previous-field                                      (6)
         // ..where "previous-field" is a same-color no-move field
         
-        // (1) -- The number of move-fields must be in range [1..5]
-        if (this.temps.length < 1 || this.temps.length > 5) {
+        // (1) -- The temporary fields must form a valid tile
+        if (!this.temps.valid()) {
             $.flash("That's not a valid tile!", "error");
             return false;
         }
         
-        // (2) -- All move fields must be connected
-        var connected = this.temps.map(function(){return false;});
-        connected[0] = true;
-        var steps = connected.length - 1; // We musn't need more steps to reach all move-fields..
-        var alltrue = function(c) { return c.length == 0 ? true : (c[0] && alltrue(c.slice(1))); }
-        var fringe = [this.temps[0]];
-        while (steps && !alltrue(connected)) {
-            fringe.map(function(f) {
-                f.neighbours().map(function(n) {
-                    for (var i = 0; i < connected.length; i++) {
-                        if (self.temps[i].equals(n)) {
-                            fringe.push(self.temps[i]);
-                            connected[i] = true;
-                        }
-                    }
-                });
-            });
-            steps--;
-        }
-        if (!alltrue(connected)) {
-            $.flash("You haven't connected the blocks!", "error");
+        // (2) -- The fields must not overlap with existing tiles
+        if (this.temps.all.filter(function(t) {
+            return self.get(t).data("permanent");
+        }).length > 0) {
+            $.flash("Overlap!", "error");
             return false;
         }
         
         // (3) -- No move fields must side with already-on-the-board same-color fields
         try {
-            this.temps.map(function(t) {
+            this.temps.all.map(function(t) {
                 t.neighbours().map(function(n) {
-                    if (self.get(n).data("player") == self.active) {
+                    if (self.get(n).data("player") == self.players.active) {
                         throw "STOP";
                     }
                 });
@@ -379,19 +459,16 @@ var Blokus = (function() {
         }
         
         // (4) -- Player must have the implied tile
-        var tilename = Blokus.identify(this.temps);
-        if (this.game.player(this.active).tiles.indexOf(tilename) < 0) {
+        if (this.players.active.tiles.indexOf(this.temps.tilename()) < 0) {
             $.flash("You don't have this tile anymore!", "error");
             return false;
         }
         
-        if (this.game.player(this.active).first_move) {
+        if (this.players.active.first_move) {
             // (5) -- if first move then (check if in corner) else (6)
-            var corner = [new Vec(0, 0), new Vec(19, 0), new Vec(19, 19), new Vec(0, 19)] [this.active];
-            if (this.temps.filter(function(t) {
-                return t.equals(corner);
-            }).length == 0) {
-                $.flash("You should place your first tile of the game in your own corner!", "error");
+            if (!this.temps.contains(this.players.active.corner)) {
+            $.flash("That's not a valid tile!", "error");
+                $.flash("You should place your first tile of the game in your own corner ("+this.players.active.corner.toString()+")!", "error");
                 return false;
             }
             return true;
@@ -399,23 +476,40 @@ var Blokus = (function() {
             // (6) -- Must have diagonal same-color touch
             var diagonal_touch = false;
             try {
-                this.temps.map(function(t) {
+                this.temps.all.map(function(t) {
                     t.diagonals().map(function(d) {
-                        if (d.data("player") == self.active) {
+                        if (self.get(d).data("player") == self.players.active) {
                             throw "FOUND";
                         }
                     });
                 });
             } catch(found) {
-                return true;
+                if (found == "FOUND") {
+                    return true;
+                }
             }
+            
             $.flash("You should place your tile diagonally touching one of your previous tiles!", "error");
             return false;
         }
     };
-    Board.prototype.commit = function() {
-        this.temps = [];
-        this.game.player(this.active).first_move = false;
+    Blokus.prototype.commit = function() {
+        var self = this;
+        var tilename = this.temps.tilename();
+        
+        // commit temporary tiles
+        this.temps.all.map(function(pos) {
+            var f = self.get(pos);
+            f.data("permanent", true);
+            f.data("player", self.players.active);
+            f.removeClass("temp");
+        });
+        this.temps.reset();
+        
+        // update player state and rotate active player
+        this.players.active.tiles = this.players.active.tiles.replace(new RegExp(tilename), "");
+        this.players.active.first_move = false;
+        this.players.rotate();
     }
     
     return Blokus;
