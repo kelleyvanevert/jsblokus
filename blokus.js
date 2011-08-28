@@ -88,19 +88,106 @@ var Blokus = (function() {
         }).join(", ");
     };
     Vec.unserialize = function(str) {
-        var numbers = str.match(/[0-9]+/g);
+        var numbers = str.match(/[0-9\-]+/g);
         if (!numbers) {
             return [];
         }
         vecs = [];
         for (var i = 0, len = numbers.length / 2; i < len; i++) {
-            vecs.push(new Vec(numbers[i*2], numbers[i*2 + 1]));
+            vecs.push(new Vec(parseInt(numbers[i*2]), parseInt(numbers[i*2 + 1])));
         }
         return vecs;
     };
-    window.V = Vec;
     
-    var blocknames = {
+    var tiles = (function() {
+        var adjustments = {
+                "N": new Vec( 0,-1),
+                "E": new Vec( 1, 0),
+                "S": new Vec( 0, 1),
+                "W": new Vec(-1, 0),
+            },
+            tiles = {},
+            blueprints = [
+                ["1", ""],
+                ["2", "E"],
+                ["v", "ES"],
+                ["3", "EE"],
+                ["o", "ESW"],
+                ["t", "EEWS"],
+                ["z", "ESE"],
+                ["l", "EES"],
+                ["4", "EEE"],
+                ["P", "EESW"],
+                ["X", "EEWNSS", new Vec(0, 1)],
+                ["F", "ESSNE"],
+                ["W", "ESES"],
+                ["T", "EEWSS"],
+                ["U", "SEEN"],
+                ["Y", "EEEWS"],
+                ["Z", "ESSE"],
+                ["N", "EESE"],
+                ["V", "EESS"],
+                ["L", "EEES"],
+                ["5", "EEEE"],
+            ],
+            analyze = function(vs) {
+                var sqlengths = [],
+                    first = vs[0];
+                //      min x  | min y  | max x  | max y
+                dims = [first.x, first.y, first.x, first.y];
+                vs.map(function(v, i) {
+                    vs.map(function(w, j) {
+                        if (i < j) {
+                            sqlengths.push(v.subtract(w).sqlength());
+                        }
+                    });
+                    dims = [
+                        Math.min(dims[0], v.x),
+                        Math.min(dims[1], v.y),
+                        Math.max(dims[2], v.x),
+                        Math.max(dims[3], v.y),
+                    ];
+                });
+                var uid = sqlengths.sort().join("."),
+                    dimensions = [dims[2]-dims[0]+1, dims[3]-dims[1]+1].sort();
+                uid += "|" + dimensions.join(".");
+                return window.z = {
+                    vecs: vs,
+                    sqlengths: sqlengths,
+                    dimensions: dimensions,
+                    uid: uid,
+                };
+            };
+        tiles.names = blueprints.map(function(t) {
+            return t[0];
+        }).join("");
+        tiles.data = blueprints.reduce(function(data, t) {
+            var vecs = t[1].split("").reduce(function(vecs, adj) {
+                vecs.unshift(vecs[0].add(adjustments[adj]));
+                return vecs;
+            }, [t[2] || new Vec(0, 0)]).reduce(function(unique, v) {
+                if (unique[v.toString()] == undefined) {
+                    unique.push(v);
+                    unique[v.toString()] = true;
+                }
+                return unique;
+            }, []);
+            data[t[0]] = analyze(vecs);
+            return data;
+        }, {});
+        tiles.lookup = blueprints.reduce(function(lookup, t) {
+            lookup[tiles.data[t[0]].uid] = t[0];
+            return lookup;
+        }, {});
+        tiles.identify = function(vecs) {
+            var res = analyze(vecs);
+            return res ? tiles.lookup[res.uid] : false;
+        };
+        return tiles;
+    })();
+    window.t = tiles;
+        /*
+    var lookup = {
         // distances, sorted | dimensions | name
                             "|1.1" : "1",
                            "1|1.2" : "2",
@@ -124,34 +211,7 @@ var Blokus = (function() {
         "1.1.1.1.2.4.4.5.9.10|2.4" : "L",
         "1.1.1.1.4.4.4.9.9.16|1.5" : "5",
     };
-    var identify = function(vecs) {
-        var uid;
-        if (vecs.length == 1) {
-            uid = "|1.1";
-        } else {
-            uid = [];
-            var last = vecs[vecs.length - 1];
-            //      min x | min y | max x | max y
-            dims = [last.x, last.y, last.x, last.y];
-            for (var i = 0; i < vecs.length - 1; i++) {
-                for (var j = i + 1; j < vecs.length; j++) {
-                    uid.push(vecs[i].subtract(vecs[j]).sqlength());
-                }
-                dims = [
-                    Math.min(dims[0], vecs[i].x),
-                    Math.min(dims[1], vecs[i].y),
-                    Math.max(dims[2], vecs[i].x),
-                    Math.max(dims[3], vecs[i].y),
-                ];
-            }
-            uid = uid.sort(function(a,b) {
-                if (a==b) return 0;
-                return parseInt(a) > parseInt(b) ? 1 : -1;
-            }).join(".");
-            uid += "|" + [dims[2]-dims[0]+1, dims[3]-dims[1]+1].sort().join(".");
-        }
-        return blocknames[uid] || false;
-    };
+    */
     
     var Blokus = function()
     {
@@ -206,7 +266,7 @@ var Blokus = (function() {
                 }
                 
                 this._valid = true;
-                this._tilename = identify(this._vecs);
+                this._tilename = tiles.identify(this._vecs);
             },
             // Public
             all: [],
@@ -259,7 +319,7 @@ var Blokus = (function() {
                 return {
                     index: k,
                     first_move: true,
-                    tiles: "12v3otzl4PXFWTUYZNVL5",
+                    tiles: tiles.names,
                     color: color,
                     corner: new Vec(k % 3 == 0 ? 0 : 19, k < 2 ? 0 : 19),
                     focus: new Vec(k % 3 == 0 ? 0 : 19, k < 2 ? 0 : 19),
@@ -294,6 +354,26 @@ var Blokus = (function() {
             }
             this.table.push(row);
         }
+        
+        this.tilestore = $("<div>").addClass("tilestore").appendTo("body");
+        tiles.names.split("").map(function(tilename) {
+            var tile = $("<div>").addClass("tile tile-"+tilename).appendTo(self.tilestore),
+                width = 0,
+                height = 0,
+                dim = 0.8;
+            tiles.data[tilename].blocks = tiles.data[tilename].vecs.map(function(v) {
+                width = Math.max(width, v.x + 1);
+                height = Math.max(height, v.y + 1);
+                return $("<div>").addClass("block").appendTo(tile).css({
+                    top: (v.y * dim) + "em",
+                    left: (v.x * dim) + "em",
+                });
+            });
+            tiles.data[tilename].el = tile.css({
+                width: (width * dim) + "em",
+                height: (height * dim) + "em",
+            });
+        });
         
         /*
             Event handling
@@ -343,7 +423,13 @@ var Blokus = (function() {
                     "border-width": border,
                 }
             },
-            emsize = Math.floor($(window).height() / 45);
+            tilestorecss = {
+                top: offset.top + Math.floor(0.25 * dim),
+                left: offset.left + Math.floor(2 * part) + Math.floor(0.25 * dim),
+                width: Math.floor(part) - Math.floor(0.5 * dim),
+                height: Math.floor(2 * part) - Math.floor(0.5 * dim),
+            },
+            emsize = dim;
         this.table.map(function(row, y) {
             row.map(function(field, x) {
                 field.css(css(x, y));
@@ -352,17 +438,30 @@ var Blokus = (function() {
         $("body").css("font-size", emsize);
         if (this.initiated) {
             this.board.css(offset);
+            this.tilestore.css(tilestorecss);
         } else {
             this.initiated = true;
             var self = this;
             setTimeout(function() {
                 self.board.css(initial_offset).show("fade", 400, function() {
                     setTimeout(function() {
-                        self.board.animate(offset, 400, "easeOutExpo");
+                        self.board.animate(offset, 400, "easeOutExpo", function() {
+                            self.tilestore.css(tilestorecss);
+                            self.display_temp_tiles();
+                        });
                     }, 200);
                 });
             }, 400);
         }
+    };
+    Blokus.prototype.display_temp_tiles = function() {
+        var self = this;
+        $(".tile").hide().find(".block").removeClass("red green yellow blue")
+            .addClass(this.players.active.color);
+        this.players.active.tiles.split("").map(function(tilename) {
+            tiles.data[tilename].el.show();
+        });
+        this.tilestore.show("fade", 300);
     };
     Blokus.prototype.key = function(e) {
         var self = this;
@@ -392,9 +491,16 @@ var Blokus = (function() {
             // ? freeze while checking validity
             if (this.valid()) {
                 this.get(this.players.active.focus).removeClass("focus");
-                this.commit();
-                this.get(this.players.active.focus).addClass("focus");
-                $.flash("Okay! It's " + this.players.active.color + "'s turn now..");
+                $(".tile-" + this.temps.tilename()).hide("puff", 300, function() {
+                    setTimeout(function() {
+                        self.tilestore.hide("fade", 600, function() {
+                            self.commit();
+                            self.get(self.players.active.focus).addClass("focus");
+                            self.display_temp_tiles();
+                            $.flash("Okay! It's " + self.players.active.color + "'s turn now..");
+                        });
+                    }, 500);
+                });
             }
         } else {
             return true;

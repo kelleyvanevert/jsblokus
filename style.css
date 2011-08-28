@@ -21,13 +21,13 @@ p.flash {
     
     font-family:Helvetica, Arial, sans-serif;
     text-align:center;
-    font-size:3em;
+    font-size:1.5em;
     font-weight:bold;
 }
 p.flash span {
     display:inline-block;
-    padding:0 10px;
-    border-radius:10px;
+    padding:0.1em 0.5em;
+    border-radius:0.5em;
     
     color:#fff;
     background:#000;
@@ -50,40 +50,55 @@ p.flash.error span {
     background-color:#ccc;
     border-color:#bbb;
 }
-.field.temp {
-    border-color:#c00;
+
+.tilestore {
+    position:absolute;
+    display:none;
+}
+.tile {
+    float:left;
+    position:relative;
+    display:none;
+    margin:0 7px 7px 0;
+}
+.block {
+    position:absolute;
+    width:0.8em;
+    height:0.8em;
+    border:none;
+    background:#ddd;
 }
 
 /* Color schemes */
-.field.red {
+.red {
     background-color:#DE2F2F;
     border-color:#C31515;
 }
-.field.red.focus {
+.red.focus {
     background-color:#AC0D0D;
     border-color:#910B0B;
 }
-.field.blue {
+.blue {
     background-color:#0E82B4;
     border-color:#0C74A0;
 }
-.field.blue.focus {
+.blue.focus {
     background-color:#0A5882;
     border-color:#084262;
 }
-.field.yellow {
+.yellow {
     background-color:#EFDC09;
     border-color:#DDCC0A;
 }
-.field.yellow.focus {
+.yellow.focus {
     background-color:#D9C91D;
     border-color:#C2B41A;
 }
-.field.green {
+.green {
     background-color:#1BBC09;
     border-color:#18A408;
 }
-.field.green.focus {
+.green.focus {
     background-color:#049312;
     border-color:#136D07;
 }
